@@ -175,9 +175,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                       child: Image.network(
                                         currentMessage.imageUrl!,
                                         width:
-                                            150, // Adjust the width according to your needs
+                                            200, // Adjust the width according to your needs
                                         height:
-                                            150, // Adjust the height according to your needs
+                                            300, // Adjust the height according to your needs
                                         fit: BoxFit.cover,
                                       ),
                                     ),
@@ -243,7 +243,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                         maxLines: null,
                         decoration: InputDecoration(
                             suffixIcon: GestureDetector(
-                                onTap: () {},
+                                onTap: () {
+                                  pickImage();
+                                },
                                 child: const Icon(
                                   Icons.image,
                                   color: Colors.blue,
@@ -256,9 +258,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       onPressed: () {
                         sendMessage();
                       },
-                      icon: Icon(
+                      icon:const Icon(
                         Icons.send,
-                        color: Theme.of(context).colorScheme.secondary,
+                        
+                        color:Colors.blue,
                       ),
                     ),
                   ],
