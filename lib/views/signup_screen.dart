@@ -23,6 +23,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       UserCredential userCredential =await 
     FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
 
+    // ignore: unnecessary_null_comparison
     if (userCredential != null) {
       String uid = userCredential.user!.uid;
       UserModel newUser = UserModel(

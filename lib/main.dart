@@ -49,6 +49,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ignore: must_be_immutable
 class MyAppLoggedIn extends StatelessWidget {
   UserModel? userModel;
     MyAppLoggedIn({super.key, required this.userModel});

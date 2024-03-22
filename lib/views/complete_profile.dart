@@ -2,7 +2,6 @@ import 'dart:developer';
 import 'dart:io';
 
 import 'package:chatapp/models/user_model.dart';
-import 'package:chatapp/views/home_page.dart';
 import 'package:chatapp/views/login_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -10,6 +9,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+// ignore: must_be_immutable
 class CompleteProfileScreen extends StatefulWidget {
   UserModel? userModel;
   CompleteProfileScreen({super.key, this.userModel});
@@ -27,7 +27,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Select Image Source'),
+          title:const Text('Select Image Source'),
           content: SingleChildScrollView(
             child: ListBody(
               children: <Widget>[

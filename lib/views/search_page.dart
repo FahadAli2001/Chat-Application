@@ -27,7 +27,7 @@ class _SearchPageState extends State<SearchPage> {
         .where('participants.${targetUser.uid}', isEqualTo: true)
         .get();
 
-    if (snapshot.docs.length >0 ) {
+    if (snapshot.docs.isNotEmpty ) {
       // fetch exsisting
       var docs = snapshot.docs[0].data();
 
@@ -105,8 +105,10 @@ class _SearchPageState extends State<SearchPage> {
                       ChatRoomModel? chatRoomModel =
                           await getChatRoomModel(searchUser);
                       if (chatRoomModel != null) {
+                        // ignore: use_build_context_synchronously
                         Navigator.pop(context);
                         Navigator.push(
+                            // ignore: use_build_context_synchronously
                             context,
                             MaterialPageRoute(
                                 builder: (context) => ChatRoomPage(

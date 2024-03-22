@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../models/chat_room_model.dart';
 
+// ignore: must_be_immutable
 class HomePage extends StatefulWidget {
   UserModel userModel;
   HomePage({super.key, required this.userModel});
