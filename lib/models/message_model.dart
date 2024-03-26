@@ -1,11 +1,13 @@
- class MessageModel {
+class MessageModel {
   String? messageId;
   String? sender;
   String? text;
   bool? seen;
   DateTime? createdOn;
   String? imageUrl;
-  String? voiceNoteUrl; // Add voiceNoteUrl field for storing voice note URL
+  String? voiceNoteUrl;
+  String? fileUrl;  
+ 
 
   MessageModel({
     this.sender,
@@ -14,7 +16,9 @@
     this.createdOn,
     this.messageId,
     this.imageUrl,
-    this.voiceNoteUrl, // Update constructor to accept voiceNoteUrl
+    this.voiceNoteUrl,
+    this.fileUrl, 
+ 
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -25,7 +29,8 @@
       createdOn: json['createdOn'].toDate(),
       messageId: json['messageId'],
       imageUrl: json['imageUrl'],
-      voiceNoteUrl: json['voiceNoteUrl'], // Update to include voiceNoteUrl
+      voiceNoteUrl: json['voiceNoteUrl'],
+      fileUrl: json['fileUrl'], 
     );
   }
 
@@ -37,7 +42,8 @@
       'createdOn': createdOn,
       'messageId': messageId,
       'imageUrl': imageUrl,
-      'voiceNoteUrl': voiceNoteUrl, // Update to include voiceNoteUrl
+      'voiceNoteUrl': voiceNoteUrl,
+      'fileUrl': fileUrl,  
     };
   }
 }

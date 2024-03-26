@@ -1,7 +1,9 @@
 import 'dart:developer';
 import 'dart:io';
+import 'package:chatapp/views/view_file_screen.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:record/record.dart';
- import 'package:chatapp/main.dart';
+import 'package:chatapp/main.dart';
 import 'package:chatapp/models/chat_room_model.dart';
 import 'package:chatapp/models/message_model.dart';
 import 'package:chatapp/models/user_model.dart';
@@ -33,6 +35,38 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   int? duration;
 
   bool isRecording = false;
+
+  String? filePath;
+
+  Future<String?> pickAndUploadFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: [
+          'pdf',
+        ],
+      );
+
+      if (result != null) {
+        File file = File(result.files.single.path!);
+        String fileName = result.files.single.name;
+        Reference storageReference =
+            FirebaseStorage.instance.ref().child('files/$fileName');
+        UploadTask uploadTask = storageReference.putFile(file);
+        TaskSnapshot snapshot = await uploadTask;
+        String downloadURL = await snapshot.ref.getDownloadURL();
+        log('File uploaded. Download URL: $downloadURL');
+        sendMessage(null, null, downloadURL);
+        return downloadURL;
+      } else {
+        log('User canceled file picking.');
+        return null;
+      }
+    } catch (e) {
+      log('Error picking and uploading file: $e');
+      return null;
+    }
+  }
 
   Future<void> startRecording() async {
     try {
@@ -79,21 +113,24 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     }
   }
 
-  void sendMessage([String? imageUrl, String? voiceNoteUrl]) async {
+  void sendMessage(
+      [String? imageUrl, String? voiceNoteUrl, String? fileUrl]) async {
     String msg = messageController.text.trim();
     messageController.clear();
 
-    if (msg != "" || imageUrl != null || voiceNoteUrl != null) {
-      // Send Message
+    if (msg != "" ||
+        imageUrl != null ||
+        voiceNoteUrl != null ||
+        fileUrl != null) {
       MessageModel newMessage = MessageModel(
-        messageId: uuid.v1(),
-        sender: widget.userModel!.uid,
-        createdOn: DateTime.now(),
-        text: msg,
-        seen: false,
-        imageUrl: imageUrl,
-        voiceNoteUrl: voiceNoteUrl,
-      );
+          messageId: uuid.v1(),
+          sender: widget.userModel!.uid,
+          createdOn: DateTime.now(),
+          text: msg,
+          seen: false,
+          imageUrl: imageUrl,
+          voiceNoteUrl: voiceNoteUrl,
+          fileUrl: fileUrl);
 
       try {
         await FirebaseFirestore.instance
@@ -115,44 +152,50 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       }
     }
   }
- 
- 
 
-Future<Duration?> fetchVoiceNoteDuration(String? voiceNoteUrl) async {
-  try {
-    final player = AudioPlayer();
-    await player.setUrl(voiceNoteUrl!); // Set the URL of the audio file
-    await player.load(); // Load the audio file
-    final totalDuration = player.duration; // Get the duration of the audio file
-    await player.dispose(); // Dispose the player when done
-    return totalDuration;
-  } catch (e) {
-    print("Error fetching voice note duration: $e");
-    return null;
+  void deleteMessage(String messageId) async {
+    try {
+      final messageRef = FirebaseFirestore.instance
+          .collection("chatrooms")
+          .doc(widget.chatRoomModel!.roomId)
+          .collection("messages")
+          .doc(messageId);
+      await messageRef.delete();
+      log('Message deleted successfully');
+    } catch (e) {
+      log('Error deleting message: $e');
+    }
   }
-}
 
-void playVoiceMessage(String voiceNoteUrl) {
-  audioPlayer.setUrl(voiceNoteUrl);
-  audioPlayer.play();
-  log('Playing voice message');
-}
+  Future<Duration?> fetchVoiceNoteDuration(String? voiceNoteUrl) async {
+    try {
+      final player = AudioPlayer();
+      await player.setUrl(voiceNoteUrl!);
+      await player.load();
+      final totalDuration = player.duration;
+      await player.dispose();
+      return totalDuration;
+    } catch (e) {
+      log("Error fetching voice note duration: $e");
+      return null;
+    }
+  }
 
+  void playVoiceMessage(String voiceNoteUrl) {
+    audioPlayer.setUrl(voiceNoteUrl);
+    audioPlayer.play();
+    log('Playing voice message');
+  }
 
+  void pauseVoiceMessage() {
+    audioPlayer.pause();
+    log('Voice message paused');
+  }
 
-void pauseVoiceMessage() {
-  audioPlayer.pause();
-  log('Voice message paused');
-}
-
-void stopVoiceMessage() {
-  audioPlayer.stop();
-  log('Voice message stopped');
-}
-
-
-
-
+  void stopVoiceMessage() {
+    audioPlayer.stop();
+    log('Voice message stopped');
+  }
 
   void pickImage() async {
     final picker = ImagePicker();
@@ -190,7 +233,16 @@ void stopVoiceMessage() {
             const SizedBox(
               width: 10,
             ),
-            Text(widget.targetUser!.fullName.toString()),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.targetUser!.fullName.toString()),
+                Text(
+                  widget.targetUser!.status.toString(),
+                  style: const TextStyle(fontSize: 15),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -200,115 +252,175 @@ void stopVoiceMessage() {
             children: [
               // This is where the chats will go
               Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: StreamBuilder(
-                    stream: FirebaseFirestore.instance
-                        .collection("chatrooms")
-                        .doc(widget.chatRoomModel!.roomId)
-                        .collection("messages")
-                        .orderBy("createdOn", descending: true)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.active) {
-                        if (snapshot.hasData) {
-                          QuerySnapshot dataSnapshot =
-                              snapshot.data as QuerySnapshot;
+                child: StreamBuilder(
+                  stream: FirebaseFirestore.instance
+                      .collection("chatrooms")
+                      .doc(widget.chatRoomModel!.roomId)
+                      .collection("messages")
+                      .orderBy("createdOn", descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.active) {
+                      if (snapshot.hasData) {
+                        QuerySnapshot dataSnapshot =
+                            snapshot.data as QuerySnapshot;
 
-                          return ListView.builder(
-                            reverse: true,
-                            itemCount: dataSnapshot.docs.length,
-                            itemBuilder: (context, index) {
-                              MessageModel currentMessage =
-                                  MessageModel.fromJson(dataSnapshot.docs[index]
-                                      .data() as Map<String, dynamic>);
-                                 fetchVoiceNoteDuration(currentMessage.voiceNoteUrl)
-                              .then((value){
-                                duration = value!.inMilliseconds;
-                              } );
-                              return Row(
-                                mainAxisAlignment: (currentMessage.sender ==
-                                        widget.userModel!.uid)
-                                    ? MainAxisAlignment.end
-                                    : MainAxisAlignment.start,
-                                children: [
-                                  if (currentMessage.imageUrl != null)
-                                    FullScreenWidget(
-                                      disposeLevel: DisposeLevel.Medium,
-                                      child: Image.network(
-                                        currentMessage.imageUrl!,
-                                        width: 200,
-                                        height: 300,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  if (currentMessage.voiceNoteUrl != null)
-                                    
-                                    VoiceMessageView(
-                                      circlesColor: Colors.blue,
-                                      activeSliderColor: Colors.blue,
-                                      controller: VoiceController(
-                                        audioSrc: currentMessage.voiceNoteUrl.toString(),
-                                       maxDuration: duration != null ? Duration(seconds: duration!) : Duration.zero,
+                        return ListView.builder(
+                          reverse: true,
+                          itemCount: dataSnapshot.docs.length,
+                          itemBuilder: (context, index) {
+                            MessageModel currentMessage = MessageModel.fromJson(
+                                dataSnapshot.docs[index].data()
+                                    as Map<String, dynamic>);
 
-                                        isFile: false,
-                                        onComplete: () {
-                                          stopVoiceMessage();
-                                        },
-                                        onPause: () { 
-                                          pauseVoiceMessage();
-                                        },
-                                        onPlaying: () {
-                                          playVoiceMessage(currentMessage.voiceNoteUrl!);
-                                        },
-                                        onError: (err) {
-                                          log(err.toString());
-                                        },
-                                      ),
-                                    ),
-                                  if (currentMessage.text != null)
-                                    Container(
-                                      margin: const EdgeInsets.symmetric(
-                                          vertical: 2),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 10, horizontal: 10),
-                                      decoration: BoxDecoration(
-                                        color: (currentMessage.sender ==
-                                                widget.userModel!.uid)
-                                            ? Colors.grey
-                                            : Theme.of(context)
-                                                .colorScheme
-                                                .secondary,
-                                        borderRadius: BorderRadius.circular(5),
-                                      ),
-                                      child: Text(
-                                        currentMessage.text!,
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                            return InkWell(
+                                onLongPress: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return AlertDialog(
+                                        title: const Text('Delete Message'),
+                                        content: const Text(
+                                            'Are you sure you want to delete this message?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                            },
+                                            child: Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () {
+                                              deleteMessage(
+                                                  currentMessage.messageId!);
+                                              Navigator.of(context).pop();
+                                            },
+                                            child: const Text('Delete'),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                                child: Row(
+                                    mainAxisAlignment: (currentMessage.sender ==
+                                            widget.userModel!.uid)
+                                        ? MainAxisAlignment.end
+                                        : MainAxisAlignment.start,
+                                    children: [
+                                      if (currentMessage.text != null)
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                            color: (currentMessage.sender ==
+                                                    widget.userModel!.uid
+                                                ? Colors.grey.shade200
+                                                : Colors.blue[200]),
+                                          ),
+                                          padding: const EdgeInsets.all(16),
+                                          child: Row(
+                                         
+                                            children: [
+                                            
+                                              Text(
+                                                currentMessage.text!,
+                                                style: const TextStyle(
+                                                    fontSize: 15),
+                                              ),
+                                                (currentMessage.sender ==
+                                                          widget
+                                                              .userModel!.uid &&
+                                                      currentMessage.seen ==
+                                                          true)
+                                                  ? const Icon(Icons.done_all,
+                                                      color: Colors.blue,
+                                                      size: 18)
+                                                  : const Icon(Icons.done,
+                                                      color: Colors.grey,
+                                                      size: 18),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
-                          );
-                        } else if (snapshot.hasError) {
-                          return const Center(
-                            child: Text(
-                                "An error occured! Please check your internet connection."),
-                          );
-                        } else {
-                          return const Center(
-                            child: Text("Say hi to your new friend"),
-                          );
-                        }
+                                      if (currentMessage.fileUrl != null)
+                                        InkWell(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    ViewFileScreen(
+                                                        pdfUrl: currentMessage
+                                                            .fileUrl!),
+                                              ),
+                                            );
+                                          },
+                                          child: Icon(
+                                            Icons.file_copy,
+                                            color: (currentMessage.sender ==
+                                                    widget.userModel!.uid)
+                                                ? Colors.grey
+                                                : Theme.of(context)
+                                                    .colorScheme
+                                                    .secondary,
+                                            size: 40,
+                                          ),
+                                        ),
+                                      if (currentMessage.voiceNoteUrl != null)
+                                        VoiceMessageView(
+                                          circlesColor: Colors.blue,
+                                          activeSliderColor: Colors.blue,
+                                          controller: VoiceController(
+                                            audioSrc: currentMessage
+                                                .voiceNoteUrl
+                                                .toString(),
+                                            maxDuration: Duration.zero,
+                                            isFile: false,
+                                            onComplete: () {
+                                              stopVoiceMessage();
+                                            },
+                                            onPause: () {
+                                              pauseVoiceMessage();
+                                            },
+                                            onPlaying: () {
+                                              playVoiceMessage(
+                                                  currentMessage.voiceNoteUrl!);
+                                            },
+                                            onError: (err) {
+                                              log(err.toString());
+                                            },
+                                          ),
+                                        ),
+                                      if (currentMessage.imageUrl != null)
+                                      
+                                        FullScreenWidget(
+                                          disposeLevel: DisposeLevel.Medium,
+                                          child: Image.network(
+                                            currentMessage.imageUrl!,
+                                            width: 200,
+                                            height: 300,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                    ]));
+                          },
+                        );
+                      } else if (snapshot.hasError) {
+                        return const Center(
+                          child: Text(
+                              "An error occurred! Please check your internet connection."),
+                        );
                       } else {
                         return const Center(
-                          child: CircularProgressIndicator(),
+                          child: Text("Say hi to your new friend"),
                         );
                       }
-                    },
-                  ),
+                    } else {
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    }
+                  },
                 ),
               ),
 
@@ -327,6 +439,14 @@ void stopVoiceMessage() {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               GestureDetector(
+                                  onTap: () {
+                                    pickAndUploadFile();
+                                  },
+                                  child: const Icon(
+                                    Icons.file_copy_rounded,
+                                    color: Colors.blue,
+                                  )),
+                              GestureDetector(
                                 onTap: () {
                                   pickImage();
                                 },
@@ -335,8 +455,7 @@ void stopVoiceMessage() {
                                   color: Colors.blue,
                                 ),
                               ),
-                              const SizedBox(
-                                  width: 10), // Add some spacing between icons
+                              const SizedBox(width: 10),
                               GestureDetector(
                                 onLongPress: () {
                                   startRecording();

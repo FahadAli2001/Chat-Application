@@ -57,6 +57,26 @@ class _SearchPageState extends State<SearchPage> {
     return chatRoom;
   }
 
+  Future<void> markMessagesAsSeen(
+    ChatRoomModel chatRoomModel, String recipientId) async {
+  CollectionReference messagesRef = FirebaseFirestore.instance
+      .collection("chatrooms")
+      .doc(chatRoomModel.roomId)
+      .collection("messages");
+
+  QuerySnapshot unseenMessagesSnapshot = await messagesRef
+      .where('sender', isEqualTo: recipientId)
+      .where('seen', isEqualTo: false)
+      .get();
+
+  unseenMessagesSnapshot.docs.forEach((messageDoc) async {
+    await messageDoc.reference.update({
+      'seen': true,
+    });
+  });
+}
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -116,6 +136,8 @@ class _SearchPageState extends State<SearchPage> {
                                       userModel: widget.userModel,
                                       chatRoomModel: chatRoomModel,
                                     )));
+                                        markMessagesAsSeen(
+                                              chatRoomModel, searchUser.uid!);
                       }
                     },
                     leading: CircleAvatar(
