@@ -51,6 +51,7 @@ dependencies:
   voice_message_package: ^2.1.4
   file_picker: ^8.0.0+1
   just_audio:
+  chat_bubbles: 
 
 dev_dependencies:
   flutter_test:

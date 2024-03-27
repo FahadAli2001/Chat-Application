@@ -15,6 +15,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:voice_message_package/voice_message_package.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:chat_bubbles/chat_bubbles.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final UserModel? targetUser;
@@ -37,6 +38,53 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   bool isRecording = false;
 
   String? filePath;
+
+  bool bothUsersPresent = false;
+  void listenForChatRoomAndMessages() {
+    FirebaseFirestore.instance
+        .collection("chatrooms")
+        .doc(widget.chatRoomModel!.roomId)
+        .snapshots()
+        .listen((chatRoomSnapshot) {
+      if (chatRoomSnapshot.exists) {
+        List<dynamic> members = chatRoomSnapshot.data()?['messages'];
+        if (members.contains(widget.targetUser!.uid) &&
+            members.contains(widget.userModel!.uid)) {
+          // Both users are present, listen for new messages
+          listenForNewMessages();
+        }
+      }
+    });
+  }
+
+  void listenForNewMessages() {
+    FirebaseFirestore.instance
+        .collection("chatrooms")
+        .doc(widget.chatRoomModel!.roomId)
+        .collection("messages")
+        .orderBy("createdOn", descending: true)
+        .snapshots()
+        .listen((querySnapshot) {
+      querySnapshot.docChanges.forEach((change) {
+        if (change.type == DocumentChangeType.added) {
+          final messageData = change.doc.data();
+          if (messageData!['sender'] != widget.userModel!.uid &&
+              !messageData['seen']) {
+            // Mark the message as seen
+            change.doc.reference.update({'seen': true});
+            setState(() {});
+          }
+          log(messageData.toString());
+        }
+      });
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // listenForChatRoomAndMessages();
+  }
 
   Future<String?> pickAndUploadFile() async {
     try {
@@ -257,14 +305,14 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       .collection("chatrooms")
                       .doc(widget.chatRoomModel!.roomId)
                       .collection("messages")
-                      .orderBy("createdOn", descending: true)
+                       .orderBy("createdOn", descending: true)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.active) {
                       if (snapshot.hasData) {
                         QuerySnapshot dataSnapshot =
                             snapshot.data as QuerySnapshot;
-
+                            
                         return ListView.builder(
                           reverse: true,
                           itemCount: dataSnapshot.docs.length,
@@ -309,39 +357,44 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                         : MainAxisAlignment.start,
                                     children: [
                                       if (currentMessage.text != null)
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            borderRadius:
-                                                BorderRadius.circular(20),
-                                            color: (currentMessage.sender ==
-                                                    widget.userModel!.uid
-                                                ? Colors.grey.shade200
-                                                : Colors.blue[200]),
-                                          ),
-                                          padding: const EdgeInsets.all(16),
-                                          child: Row(
-                                         
-                                            children: [
-                                            
-                                              Text(
-                                                currentMessage.text!,
-                                                style: const TextStyle(
-                                                    fontSize: 15),
-                                              ),
-                                                (currentMessage.sender ==
-                                                          widget
-                                                              .userModel!.uid &&
-                                                      currentMessage.seen ==
-                                                          true)
-                                                  ? const Icon(Icons.done_all,
-                                                      color: Colors.blue,
-                                                      size: 18)
-                                                  : const Icon(Icons.done,
-                                                      color: Colors.grey,
-                                                      size: 18),
-                                            ],
+                                        BubbleSpecialOne(
+                                          text: currentMessage.text!,
+                                          isSender: currentMessage.sender == widget.userModel!.uid! ?true:false,
+                                          color: Colors.blue.shade100,
+                                          textStyle: const TextStyle(
+                                            fontSize: 20,
+                                            color: Colors.blue,
+                                            fontStyle: FontStyle.italic,
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
+                                      // Container(
+                                      //   decoration: BoxDecoration(
+                                      //     borderRadius:
+                                      //         BorderRadius.circular(20),
+                                      //     color: (currentMessage.sender ==
+                                      //             widget.userModel!.uid
+                                      //         ? Colors.grey.shade200
+                                      //         : Colors.blue[200]),
+                                      //   ),
+                                      //   padding: const EdgeInsets.all(16),
+                                      //   child: Row(
+                                      //     children: [
+                                      //       Text(
+                                      //         currentMessage.text!,
+                                      //         style: const TextStyle(
+                                      //             fontSize: 15),
+                                      //       ),
+                                      //       (currentMessage.seen == true)
+                                      //           ? const Icon(Icons.done_all,
+                                      //               color: Colors.blue,
+                                      //               size: 18)
+                                      //           : const Icon(Icons.done,
+                                      //               color: Colors.grey,
+                                      //               size: 18),
+                                      //     ],
+                                      //   ),
+                                      // ),
                                       if (currentMessage.fileUrl != null)
                                         InkWell(
                                           onTap: () {
@@ -392,7 +445,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                           ),
                                         ),
                                       if (currentMessage.imageUrl != null)
-                                      
                                         FullScreenWidget(
                                           disposeLevel: DisposeLevel.Medium,
                                           child: Image.network(
@@ -424,6 +476,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                 ),
               ),
 
+              // for textfield
               Container(
                 color: Colors.grey[200],
                 padding:
