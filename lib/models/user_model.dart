@@ -4,13 +4,15 @@ class UserModel{
   String? email;
   String? profileImage;
   String? status;
+  bool? isInRoom;
 
   UserModel({
     this.uid,
     this.fullName,
     this.email,
     this.profileImage,
-    this.status
+    this.status,
+    this.isInRoom
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -19,7 +21,8 @@ class UserModel{
       fullName: json['fullName'],
       email: json['email'],
       profileImage: json['profileImage'],
-      status: json['status']
+      status: json['status'],
+      isInRoom: json['isInRoom']
     );
   }
 
@@ -29,7 +32,8 @@ class UserModel{
       'fullName': fullName,
       'email': email,
       'profileImage': profileImage,
-      'status':status
+      'status':status,
+      'isInRoom':isInRoom
     };
   }
 }

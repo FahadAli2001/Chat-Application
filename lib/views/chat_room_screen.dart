@@ -21,8 +21,12 @@ class ChatRoomPage extends StatefulWidget {
   final UserModel? targetUser;
   final ChatRoomModel? chatRoomModel;
   final UserModel? userModel;
-  const ChatRoomPage(
-      {super.key, this.targetUser, this.chatRoomModel, this.userModel});
+  ChatRoomPage({
+    super.key,
+    this.targetUser,
+    this.chatRoomModel,
+    this.userModel,
+  });
 
   @override
   State<ChatRoomPage> createState() => _ChatRoomPageState();
@@ -39,52 +43,38 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   String? filePath;
 
-  bool bothUsersPresent = false;
-  void listenForChatRoomAndMessages() {
-    FirebaseFirestore.instance
-        .collection("chatrooms")
-        .doc(widget.chatRoomModel!.roomId)
-        .snapshots()
-        .listen((chatRoomSnapshot) {
-      if (chatRoomSnapshot.exists) {
-        List<dynamic> members = chatRoomSnapshot.data()?['messages'];
-        if (members.contains(widget.targetUser!.uid) &&
-            members.contains(widget.userModel!.uid)) {
-          // Both users are present, listen for new messages
-          listenForNewMessages();
-        }
-      }
-    });
-  }
-
-  void listenForNewMessages() {
-    FirebaseFirestore.instance
-        .collection("chatrooms")
-        .doc(widget.chatRoomModel!.roomId)
-        .collection("messages")
-        .orderBy("createdOn", descending: true)
-        .snapshots()
-        .listen((querySnapshot) {
-      querySnapshot.docChanges.forEach((change) {
-        if (change.type == DocumentChangeType.added) {
-          final messageData = change.doc.data();
-          if (messageData!['sender'] != widget.userModel!.uid &&
-              !messageData['seen']) {
-            // Mark the message as seen
-            change.doc.reference.update({'seen': true});
-            setState(() {});
-          }
-          log(messageData.toString());
-        }
-      });
-    });
-  }
-
   @override
   void initState() {
+    // TODO: implement initState
     super.initState();
-    // listenForChatRoomAndMessages();
+   
+    log(widget.userModel!.isInRoom!.toString() + ' current user');
+    log(widget.targetUser!.isInRoom!.toString() + ' target user');
+    
   }
+ void listenForMessageChanges() {
+  FirebaseFirestore.instance
+      .collection("chatrooms")
+      .doc(widget.chatRoomModel!.roomId)
+      .collection("messages")
+      .orderBy('timestamp', descending: true) // Sort messages by timestamp, most recent first
+      .snapshots()
+      .listen((QuerySnapshot snapshot) {
+    // Check if there are any messages
+    if (snapshot.docs.isNotEmpty) {
+      // Get the timestamp of the most recent message
+      Timestamp? mostRecentTimestamp = snapshot.docs.first['timestamp'];
+      DateTime? mostRecentTime = mostRecentTimestamp?.toDate();
+
+      // Check if the most recent message was sent before the current time
+      if (mostRecentTime != null && mostRecentTime.isBefore(DateTime.now())) {
+        // Mark the most recent message as seen
+        snapshot.docs.first.reference.update({'seen': true});
+      }
+    }
+  });
+}
+
 
   Future<String?> pickAndUploadFile() async {
     try {
@@ -267,10 +257,30 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     sendMessage(imageUrl);
   }
 
+  void setUserPresent() async {
+    widget.userModel!.isInRoom = false;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.userModel!.uid!)
+        .set(widget.userModel!.toJson());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: GestureDetector(
+            onTap: () {
+              setUserPresent();
+              Navigator.pop(context);
+              log(widget.userModel!.isInRoom!.toString() + ' current user');
+    log(widget.targetUser!.isInRoom!.toString() + ' target user');
+    
+            },
+            child: const Icon(
+              Icons.arrow_back,
+              color: Colors.black,
+            )),
         title: Row(
           children: [
             CircleAvatar(
@@ -305,16 +315,17 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       .collection("chatrooms")
                       .doc(widget.chatRoomModel!.roomId)
                       .collection("messages")
-                       .orderBy("createdOn", descending: true)
+                      .orderBy("createdOn", descending: true)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.active) {
                       if (snapshot.hasData) {
                         QuerySnapshot dataSnapshot =
                             snapshot.data as QuerySnapshot;
-                            
+
                         return ListView.builder(
                           reverse: true,
+                          shrinkWrap: true,
                           itemCount: dataSnapshot.docs.length,
                           itemBuilder: (context, index) {
                             MessageModel currentMessage = MessageModel.fromJson(
@@ -359,7 +370,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                       if (currentMessage.text != null)
                                         BubbleSpecialOne(
                                           text: currentMessage.text!,
-                                          isSender: currentMessage.sender == widget.userModel!.uid! ?true:false,
+                                          isSender: currentMessage.sender ==
+                                                  widget.userModel!.uid!
+                                              ? true
+                                              : false,
                                           color: Colors.blue.shade100,
                                           textStyle: const TextStyle(
                                             fontSize: 20,
@@ -539,7 +553,16 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     ),
                     IconButton(
                       onPressed: () {
-                        sendMessage();
+                       if (widget.userModel!.isInRoom == true && widget.targetUser!.isInRoom == true) {
+                        
+                          sendMessage();
+                         listenForMessageChanges();
+                          log(widget.userModel!.isInRoom.toString()+ '---u--- ');
+                         log(widget.targetUser!.isInRoom.toString()+ '---t--');
+                        
+                       } else {
+                         sendMessage();
+                       }
                       },
                       icon: const Icon(
                         Icons.send,

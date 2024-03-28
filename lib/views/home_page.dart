@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:chatapp/controller/firebase_helper.dart';
 import 'package:chatapp/models/user_model.dart';
 import 'package:chatapp/views/chat_room_screen.dart';
@@ -43,6 +45,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         .set(widget.userModel.toJson());
   }
 
+  void setUserPresent() async {
+    widget.userModel.isInRoom = true;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.userModel.uid)
+        .set(widget.userModel.toJson());
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -53,6 +63,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setUserStatus('offline');
     }
   }
+ 
+
+
 
 Future<void> markMessagesAsSeen(
     ChatRoomModel chatRoomModel, String recipientId) async {
@@ -159,6 +172,8 @@ Future<void> markMessagesAsSeen(
 
                                       return ListTile(
                                         onTap: () {
+                                          // log(widget.userModel.uid!);
+                                          setUserPresent();
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(
@@ -167,9 +182,12 @@ Future<void> markMessagesAsSeen(
                                                 chatRoomModel: chatRoomModel,
                                                 userModel: widget.userModel,
                                                 targetUser: targetUser,
+                                               
                                               );
                                             }),
+                                           
                                           );
+                                        
                                           markMessagesAsSeen(
                                               chatRoomModel, targetUser.uid!);
                                         },

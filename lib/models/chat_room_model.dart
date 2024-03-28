@@ -1,19 +1,22 @@
 class ChatRoomModel {
   String? roomId;
-  Map<String,dynamic>? participants;
+  Map<String, dynamic>? participants;
   String? lastMessage;
+  
 
   ChatRoomModel({
     this.roomId,
     this.participants,
-    this.lastMessage
+    this.lastMessage,
+  
   });
 
   factory ChatRoomModel.fromJson(Map<String, dynamic> json) {
     return ChatRoomModel(
       roomId: json['roomId'],
       participants: json['participants'],
-      lastMessage: json['lastMessage']
+      lastMessage: json['lastMessage'],
+     
     );
   }
 
@@ -21,7 +24,7 @@ class ChatRoomModel {
     return {
       'roomId': roomId,
       'participants': participants,
-      'lastMessage':lastMessage
+  
     };
   }
 }
