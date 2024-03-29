@@ -1,13 +1,18 @@
 import 'dart:developer';
+import 'dart:io';
 
 import 'package:chatapp/controller/firebase_helper.dart';
+import 'package:chatapp/main.dart';
 import 'package:chatapp/models/user_model.dart';
 import 'package:chatapp/views/chat_room_screen.dart';
 import 'package:chatapp/views/login_screen.dart';
 import 'package:chatapp/views/search_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../models/chat_room_model.dart';
 
@@ -22,6 +27,115 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   FirebaseHelper firebaseHelper = FirebaseHelper();
+  FirebaseMessaging firebaseMessaging = FirebaseMessaging.instance;
+  //for foreground notifications
+  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin  = FlutterLocalNotificationsPlugin();
+  
+  void firebaseInit(BuildContext context){
+    FirebaseMessaging.onMessage.listen((message) {
+
+      RemoteNotification? notification = message.notification ;
+      AndroidNotification? android = message.notification!.android ;
+
+      if (kDebugMode) {
+        print("notifications title:${notification!.title}");
+        print("notifications body:${notification.body}");
+        print('count:${android!.count}');
+        print('data:${message.data.toString()}');
+      }
+
+      
+
+      if(Platform.isAndroid){
+        initLocalNotifications(context, message);
+        showNotification(message);
+      }
+    });
+  }
+    // function to show visible notification when app is active
+  Future<void> showNotification(RemoteMessage message)async{
+
+    AndroidNotificationChannel channel = AndroidNotificationChannel(
+        message.notification!.android!.channelId.toString(),
+      message.notification!.android!.channelId.toString() ,
+      importance: Importance.max  ,
+      showBadge: true ,
+      playSound: true,
+    
+    );
+
+     AndroidNotificationDetails androidNotificationDetails = AndroidNotificationDetails(
+      channel.id.toString(),
+      channel.name.toString() ,
+      channelDescription: 'your channel description',
+      importance: Importance.high,
+      priority: Priority.high ,
+      playSound: true,
+      ticker: 'ticker' ,
+         sound: channel.sound
+    //     sound: RawResourceAndroidNotificationSound('jetsons_doorbell')
+    //  icon: largeIconPath
+    );
+
+    const DarwinNotificationDetails darwinNotificationDetails = DarwinNotificationDetails(
+      presentAlert: true ,
+      presentBadge: true ,
+      presentSound: true
+    ) ;
+
+    NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+      iOS: darwinNotificationDetails
+    );
+
+    Future.delayed(Duration.zero , (){
+      _flutterLocalNotificationsPlugin.show(
+          0,
+          message.notification!.title.toString(),
+          message.notification!.body.toString(),
+          notificationDetails ,
+      );
+    });
+
+  }
+
+    void initLocalNotifications(BuildContext context, RemoteMessage message)async{
+    var androidInitializationSettings = const AndroidInitializationSettings('@mipmap/ic_launcher');
+    var iosInitializationSettings = const DarwinInitializationSettings();
+
+    var initializationSetting = InitializationSettings(
+        android: androidInitializationSettings ,
+        iOS: iosInitializationSettings
+    );
+
+    await _flutterLocalNotificationsPlugin.initialize(
+        initializationSetting,
+      onDidReceiveNotificationResponse: (payload){
+          // handle interaction when app is active for android
+        //  handleMessage(context, message);
+      }
+    );
+  }
+
+  
+
+  Future<void> getFirebaseMessageToken() async {
+    NotificationSettings settings = await firebaseMessaging.requestPermission(
+    );
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      await firebaseMessaging.getToken().then((deviceToken) async {
+        if (deviceToken!=null) {
+           widget.userModel.fToken = deviceToken;
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(widget.userModel.uid)
+                .set(widget.userModel.toJson());
+                log('device token :  $deviceToken');
+                }
+              });
+    }
+  }
+
   @override
   void dispose() {
     // Dispose the observer
@@ -35,6 +149,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     // for app state
     WidgetsBinding.instance.addObserver(this);
     setUserStatus('online');
+    getFirebaseMessageToken();
+    firebaseInit(context);
   }
 
   void setUserStatus(String status) async {
@@ -63,29 +179,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setUserStatus('offline');
     }
   }
- 
 
+  Future<void> markMessagesAsSeen(
+      ChatRoomModel chatRoomModel, String recipientId) async {
+    CollectionReference messagesRef = FirebaseFirestore.instance
+        .collection("chatrooms")
+        .doc(chatRoomModel.roomId)
+        .collection("messages");
 
+    QuerySnapshot unseenMessagesSnapshot = await messagesRef
+        .where('sender', isEqualTo: recipientId)
+        .where('seen', isEqualTo: false)
+        .get();
 
-Future<void> markMessagesAsSeen(
-    ChatRoomModel chatRoomModel, String recipientId) async {
-  CollectionReference messagesRef = FirebaseFirestore.instance
-      .collection("chatrooms")
-      .doc(chatRoomModel.roomId)
-      .collection("messages");
-
-  QuerySnapshot unseenMessagesSnapshot = await messagesRef
-      .where('sender', isEqualTo: recipientId)
-      .where('seen', isEqualTo: false)
-      .get();
-
-  unseenMessagesSnapshot.docs.forEach((messageDoc) async {
-    await messageDoc.reference.update({
-      'seen': true,
+    unseenMessagesSnapshot.docs.forEach((messageDoc) async {
+      await messageDoc.reference.update({
+        'seen': true,
+      });
     });
-  });
-}
-
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -182,12 +294,10 @@ Future<void> markMessagesAsSeen(
                                                 chatRoomModel: chatRoomModel,
                                                 userModel: widget.userModel,
                                                 targetUser: targetUser,
-                                               
                                               );
                                             }),
-                                           
                                           );
-                                        
+
                                           markMessagesAsSeen(
                                               chatRoomModel, targetUser.uid!);
                                         },

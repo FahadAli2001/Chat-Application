@@ -6,6 +6,8 @@ import 'package:chatapp/views/login_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_notification_channel/flutter_notification_channel.dart';
+import 'package:flutter_notification_channel/notification_importance.dart';
 import 'package:uuid/uuid.dart';
 
 
@@ -14,8 +16,15 @@ var uuid =const Uuid();
 void main()async {
   WidgetsFlutterBinding.ensureInitialized(); 
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+    options: DefaultFirebaseOptions.currentPlatform);
+   await FlutterNotificationChannel().registerNotificationChannel(
+    description: 'For showing messages',
+    id: 'chats',
+    importance: NotificationImportance.IMPORTANCE_HIGH,
+    name: 'Chats',
+    
 );
+ 
  
   User? user = FirebaseAuth.instance.currentUser;
    // ignore: unused_local_variable

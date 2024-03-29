@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
+import 'package:chatapp/controller/firebase_helper.dart';
 import 'package:chatapp/views/view_file_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:record/record.dart';
@@ -16,9 +18,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:voice_message_package/voice_message_package.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:chat_bubbles/chat_bubbles.dart';
+import 'package:http/http.dart' as http;
 
 class ChatRoomPage extends StatefulWidget {
-  final UserModel? targetUser;
+  UserModel? targetUser;
   final ChatRoomModel? chatRoomModel;
   final UserModel? userModel;
   ChatRoomPage({
@@ -42,39 +45,132 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   bool isRecording = false;
 
   String? filePath;
+  FirebaseHelper firebaseHelper = FirebaseHelper();
 
-  @override
-  void initState() {
-    // TODO: implement initState
-    super.initState();
-   
-    log(widget.userModel!.isInRoom!.toString() + ' current user');
-    log(widget.targetUser!.isInRoom!.toString() + ' target user');
-    
-  }
- void listenForMessageChanges() {
-  FirebaseFirestore.instance
-      .collection("chatrooms")
-      .doc(widget.chatRoomModel!.roomId)
-      .collection("messages")
-      .orderBy('timestamp', descending: true) // Sort messages by timestamp, most recent first
-      .snapshots()
-      .listen((QuerySnapshot snapshot) {
-    // Check if there are any messages
-    if (snapshot.docs.isNotEmpty) {
-      // Get the timestamp of the most recent message
-      Timestamp? mostRecentTimestamp = snapshot.docs.first['timestamp'];
-      DateTime? mostRecentTime = mostRecentTimestamp?.toDate();
+  Future<void> sendPushNotifications(MessageModel messageModel) async {
+    try {
+      var Url = Uri.parse('https://fcm.googleapis.com/fcm/send');
+      var body = {
+        "to": widget.targetUser!.fToken,
+        'priority': 'high',
+        "notification": {
+          "title": widget.userModel!.fullName,
+          "body": messageModel.text,
+          "android_channel_id": "chats",
+          "sound": "default"
+        }
+      };
 
-      // Check if the most recent message was sent before the current time
-      if (mostRecentTime != null && mostRecentTime.isBefore(DateTime.now())) {
-        // Mark the most recent message as seen
-        snapshot.docs.first.reference.update({'seen': true});
+      var response = await http.post(Url,
+          headers: {
+            HttpHeaders.contentTypeHeader: 'application/json',
+            HttpHeaders.authorizationHeader:
+                'key=AAAAQaZnRKE:APA91bF6SPMsbG21V4RUQQpPhtrKbLiT6kgm1N09ty3bANghIE4yf9HK_KMxADa8Je25at3i_W74t-Xw7emb03jBM41FDS_aUw4G09mCGuY-nO1F3N0DN1dfNvNpaNO832JHSw99FXfA'
+          },
+          body: jsonEncode(body));
+      if (response.statusCode == 200) {
+        log('notification send');
+      } else {
+        log('notification not send');
       }
+    } catch (e) {
+      log("firebase push notification error : $e");
     }
-  });
-}
+  }
 
+  void listenForMessageChanges() async {
+    try {
+      // Fetch real-time data from the user collection
+      QuerySnapshot userData = await FirebaseFirestore.instance
+          .collection('users')
+          .where('uid', isEqualTo: widget.userModel!.uid)
+          .get();
+
+      var userDataMap = userData.docs.first.data() as Map<String, dynamic>;
+
+      bool up = userDataMap['isInRoom'];
+      log('User isInRoom: $up');
+
+      QuerySnapshot targetData = await FirebaseFirestore.instance
+          .collection('users')
+          .where('uid', isEqualTo: widget.targetUser!.uid)
+          .get();
+
+      var targetDatamAP = targetData.docs.first.data() as Map<String, dynamic>;
+
+      bool tp = targetDatamAP['isInRoom'];
+      log('Target isInRoom: $tp');
+
+      if (up && tp) {
+        // Simplify condition, as up and tp are already boolean
+        // Send the message
+        sendMessage();
+
+        // Listen for message changes and set 'seen' flag to true
+        FirebaseFirestore.instance
+            .collection("chatrooms")
+            .doc(widget.chatRoomModel!.roomId)
+            .collection("messages")
+            .get()
+            .then((snapshot) {
+          snapshot.docs.forEach((messageDoc) async {
+            await messageDoc.reference.update({'seen': true});
+          });
+        });
+      } else {
+        log('false--');
+        // Your code inside the false block
+        sendMessage(); // Only send the message when conditions are not met
+      }
+    } catch (e) {
+      log(e.toString());
+    }
+  }
+
+  // void listenForMessageChanges() async {
+  //   // Fetch real-time data from the user collection
+  //   QuerySnapshot userData = await FirebaseFirestore.instance
+  //       .collection('users')
+  //       .where('uid', isEqualTo: widget.userModel!.uid)
+  //       .get();
+
+  //   var userDataMap = userData.docs.first.data() as Map<String, dynamic>;
+
+  //   bool up = userDataMap['isInRoom'];
+  //   log(up.toString());
+  //   log('----------');
+  //   QuerySnapshot targetData = await FirebaseFirestore.instance
+  //       .collection('users')
+  //       .where('uid', isEqualTo: widget.targetUser!.uid)
+  //       .get();
+
+  //   var targetDatamAP = targetData.docs.first.data() as Map<String, dynamic>;
+
+  //   bool tp = targetDatamAP['isInRoom'];
+  //   log(tp.toString());
+
+  //   if (up == true && tp == true) {
+  //     log('true---');
+
+  //      FirebaseFirestore.instance
+  //       .collection("chatrooms")
+  //       .doc(widget.chatRoomModel!.roomId)
+  //       .collection("messages")
+  //       .snapshots()
+  //       .listen((QuerySnapshot snapshot) {
+  //     snapshot.docs.forEach((messageDoc) async {
+  //       await messageDoc.reference.update({
+  //         'seen': true,
+  //       });
+  //     });
+
+  //   });
+  //    sendMessage();
+  //   } else {
+  //     log('false--');
+  //     sendMessage();
+  //   }
+  // }
 
   Future<String?> pickAndUploadFile() async {
     try {
@@ -94,7 +190,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         TaskSnapshot snapshot = await uploadTask;
         String downloadURL = await snapshot.ref.getDownloadURL();
         log('File uploaded. Download URL: $downloadURL');
-        sendMessage(null, null, downloadURL);
+        sendMessage(null, null, downloadURL, 'file');
         return downloadURL;
       } else {
         log('User canceled file picking.');
@@ -145,30 +241,46 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         return taskSnapshot.ref.getDownloadURL();
       });
 
-      sendMessage(null, audioUrl);
+      sendMessage(null, audioUrl, null, 'voice');
     } catch (e) {
       log("Error uploading voice note: $e");
     }
   }
 
-  void sendMessage(
-      [String? imageUrl, String? voiceNoteUrl, String? fileUrl]) async {
+  void sendMessage([
+    String? imageUrl,
+    String? voiceNoteUrl,
+    String? fileUrl,
+    String? messageType,
+  ]) async {
     String msg = messageController.text.trim();
     messageController.clear();
 
-    if (msg != "" ||
+    if (msg.isNotEmpty ||
         imageUrl != null ||
         voiceNoteUrl != null ||
         fileUrl != null) {
+      String? textToSend;
+      if (messageType == "voice") {
+        textToSend = "Voice Message";
+      } else if (messageType == "file") {
+        textToSend = "File ";
+      } else if (messageType == "image") {
+        textToSend = "Image ";
+      } else {
+        textToSend = msg;
+      }
+
       MessageModel newMessage = MessageModel(
-          messageId: uuid.v1(),
-          sender: widget.userModel!.uid,
-          createdOn: DateTime.now(),
-          text: msg,
-          seen: false,
-          imageUrl: imageUrl,
-          voiceNoteUrl: voiceNoteUrl,
-          fileUrl: fileUrl);
+        messageId: uuid.v1(),
+        sender: widget.userModel!.uid,
+        createdOn: DateTime.now(),
+        text: textToSend,
+        seen: false, // Set seen to false for new messages
+        imageUrl: imageUrl,
+        voiceNoteUrl: voiceNoteUrl,
+        fileUrl: fileUrl,
+      );
 
       try {
         await FirebaseFirestore.instance
@@ -176,7 +288,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             .doc(widget.chatRoomModel!.roomId)
             .collection("messages")
             .doc(newMessage.messageId)
-            .set(newMessage.toJson());
+            .set(newMessage.toJson())
+            .then((value) {
+          sendPushNotifications(newMessage);
+        });
 
         widget.chatRoomModel!.lastMessage = msg;
         await FirebaseFirestore.instance
@@ -254,7 +369,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       return taskSnapshot.ref.getDownloadURL();
     });
 
-    sendMessage(imageUrl);
+    sendMessage(imageUrl, null, null, 'image');
   }
 
   void setUserPresent() async {
@@ -273,9 +388,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             onTap: () {
               setUserPresent();
               Navigator.pop(context);
-              log(widget.userModel!.isInRoom!.toString() + ' current user');
-    log(widget.targetUser!.isInRoom!.toString() + ' target user');
-    
+              log('${widget.userModel!.isInRoom!} current user');
+              log('${widget.targetUser!.isInRoom!} target user');
             },
             child: const Icon(
               Icons.arrow_back,
@@ -325,150 +439,159 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
                         return ListView.builder(
                           reverse: true,
-                          shrinkWrap: true,
                           itemCount: dataSnapshot.docs.length,
                           itemBuilder: (context, index) {
                             MessageModel currentMessage = MessageModel.fromJson(
-                                dataSnapshot.docs[index].data()
-                                    as Map<String, dynamic>);
+                              dataSnapshot.docs[index].data()
+                                  as Map<String, dynamic>,
+                            );
+
+                            bool isCurrentUserMessage =
+                                currentMessage.sender == widget.userModel!.uid;
 
                             return InkWell(
-                                onLongPress: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (BuildContext context) {
-                                      return AlertDialog(
-                                        title: const Text('Delete Message'),
-                                        content: const Text(
-                                            'Are you sure you want to delete this message?'),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () {
-                                              Navigator.of(context).pop();
-                                            },
-                                            child: Text('Cancel'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () {
-                                              deleteMessage(
-                                                  currentMessage.messageId!);
-                                              Navigator.of(context).pop();
-                                            },
-                                            child: const Text('Delete'),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  );
-                                },
-                                child: Row(
-                                    mainAxisAlignment: (currentMessage.sender ==
-                                            widget.userModel!.uid)
-                                        ? MainAxisAlignment.end
-                                        : MainAxisAlignment.start,
-                                    children: [
-                                      if (currentMessage.text != null)
-                                        BubbleSpecialOne(
-                                          text: currentMessage.text!,
-                                          isSender: currentMessage.sender ==
-                                                  widget.userModel!.uid!
-                                              ? true
-                                              : false,
-                                          color: Colors.blue.shade100,
-                                          textStyle: const TextStyle(
-                                            fontSize: 20,
-                                            color: Colors.blue,
-                                            fontStyle: FontStyle.italic,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      // Container(
-                                      //   decoration: BoxDecoration(
-                                      //     borderRadius:
-                                      //         BorderRadius.circular(20),
-                                      //     color: (currentMessage.sender ==
-                                      //             widget.userModel!.uid
-                                      //         ? Colors.grey.shade200
-                                      //         : Colors.blue[200]),
-                                      //   ),
-                                      //   padding: const EdgeInsets.all(16),
-                                      //   child: Row(
-                                      //     children: [
-                                      //       Text(
-                                      //         currentMessage.text!,
-                                      //         style: const TextStyle(
-                                      //             fontSize: 15),
-                                      //       ),
-                                      //       (currentMessage.seen == true)
-                                      //           ? const Icon(Icons.done_all,
-                                      //               color: Colors.blue,
-                                      //               size: 18)
-                                      //           : const Icon(Icons.done,
-                                      //               color: Colors.grey,
-                                      //               size: 18),
-                                      //     ],
-                                      //   ),
-                                      // ),
-                                      if (currentMessage.fileUrl != null)
-                                        InkWell(
-                                          onTap: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) =>
-                                                    ViewFileScreen(
-                                                        pdfUrl: currentMessage
-                                                            .fileUrl!),
-                                              ),
-                                            );
+                              onLongPress: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (BuildContext context) {
+                                    return AlertDialog(
+                                      title: const Text('Delete Message'),
+                                      content: const Text(
+                                          'Are you sure you want to delete this message?'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.of(context).pop();
                                           },
-                                          child: Icon(
-                                            Icons.file_copy,
-                                            color: (currentMessage.sender ==
-                                                    widget.userModel!.uid)
-                                                ? Colors.grey
-                                                : Theme.of(context)
-                                                    .colorScheme
-                                                    .secondary,
-                                            size: 40,
+                                          child: Text('Cancel'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            deleteMessage(
+                                                currentMessage.messageId!);
+                                            Navigator.of(context).pop();
+                                          },
+                                          child: const Text('Delete'),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                );
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                child: Column(
+                                  crossAxisAlignment: isCurrentUserMessage
+                                      ? CrossAxisAlignment.end
+                                      : CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: isCurrentUserMessage
+                                          ? MainAxisAlignment.end
+                                          : MainAxisAlignment.start,
+                                      children: [
+                                        if (!isCurrentUserMessage)
+                                          SizedBox(
+                                            width: 48, // Adjust as needed
+                                          ),
+                                        Flexible(
+                                          child: Container(
+                                            padding: EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: isCurrentUserMessage
+                                                  ? Colors.blue.shade100
+                                                  : Colors.grey.shade200,
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                            child: Text(
+                                              currentMessage.text!,
+                                              style: TextStyle(fontSize: 16),
+                                            ),
                                           ),
                                         ),
-                                      if (currentMessage.voiceNoteUrl != null)
-                                        VoiceMessageView(
-                                          circlesColor: Colors.blue,
-                                          activeSliderColor: Colors.blue,
-                                          controller: VoiceController(
-                                            audioSrc: currentMessage
-                                                .voiceNoteUrl
-                                                .toString(),
-                                            maxDuration: Duration.zero,
-                                            isFile: false,
-                                            onComplete: () {
-                                              stopVoiceMessage();
-                                            },
-                                            onPause: () {
-                                              pauseVoiceMessage();
-                                            },
-                                            onPlaying: () {
-                                              playVoiceMessage(
-                                                  currentMessage.voiceNoteUrl!);
-                                            },
-                                            onError: (err) {
-                                              log(err.toString());
-                                            },
+                                        if (isCurrentUserMessage)
+                                          SizedBox(
+                                            width: 48, // Adjust as needed
                                           ),
+                                      ],
+                                    ),
+                                    if (currentMessage.fileUrl != null)
+                                      InkWell(
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  ViewFileScreen(
+                                                pdfUrl: currentMessage.fileUrl!,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        child: Icon(
+                                          Icons.file_copy,
+                                          color: isCurrentUserMessage
+                                              ? Colors.grey
+                                              : Theme.of(context)
+                                                  .colorScheme
+                                                  .secondary,
+                                          size: 40,
                                         ),
-                                      if (currentMessage.imageUrl != null)
-                                        FullScreenWidget(
-                                          disposeLevel: DisposeLevel.Medium,
-                                          child: Image.network(
-                                            currentMessage.imageUrl!,
-                                            width: 200,
-                                            height: 300,
-                                            fit: BoxFit.cover,
-                                          ),
+                                      ),
+                                    if (currentMessage.voiceNoteUrl != null)
+                                      VoiceMessageView(
+                                        circlesColor: Colors.blue,
+                                        activeSliderColor: Colors.blue,
+                                        controller: VoiceController(
+                                          audioSrc: currentMessage.voiceNoteUrl
+                                              .toString(),
+                                          maxDuration: Duration.zero,
+                                          isFile: false,
+                                          onComplete: () {
+                                            stopVoiceMessage();
+                                          },
+                                          onPause: () {
+                                            pauseVoiceMessage();
+                                          },
+                                          onPlaying: () {
+                                            playVoiceMessage(
+                                                currentMessage.voiceNoteUrl!);
+                                          },
+                                          onError: (err) {
+                                            log(err.toString());
+                                          },
                                         ),
-                                    ]));
+                                      ),
+                                    if (currentMessage.imageUrl != null)
+                                      FullScreenWidget(
+                                        disposeLevel: DisposeLevel.Medium,
+                                        child: Image.network(
+                                          currentMessage.imageUrl!,
+                                          width: 200,
+                                          height: 300,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    if (isCurrentUserMessage)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(right: 8),
+                                        child: Icon(
+                                          currentMessage.seen == true
+                                              ? Icons.done_all
+                                              : Icons.done,
+                                          color: currentMessage.seen == true
+                                              ? Colors.blue
+                                              : Colors.black,
+                                          size: 18,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
                           },
                         );
                       } else if (snapshot.hasError) {
@@ -553,16 +676,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     ),
                     IconButton(
                       onPressed: () {
-                       if (widget.userModel!.isInRoom == true && widget.targetUser!.isInRoom == true) {
-                        
-                          sendMessage();
-                         listenForMessageChanges();
-                          log(widget.userModel!.isInRoom.toString()+ '---u--- ');
-                         log(widget.targetUser!.isInRoom.toString()+ '---t--');
-                        
-                       } else {
-                         sendMessage();
-                       }
+                        //  sendMessage();
+                        listenForMessageChanges();
                       },
                       icon: const Icon(
                         Icons.send,
