@@ -17,9 +17,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:voice_message_package/voice_message_package.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:chat_bubbles/chat_bubbles.dart';
 import 'package:http/http.dart' as http;
 
+// ignore: must_be_immutable
 class ChatRoomPage extends StatefulWidget {
   UserModel? targetUser;
   final ChatRoomModel? chatRoomModel;

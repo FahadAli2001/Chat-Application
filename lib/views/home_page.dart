@@ -2,7 +2,6 @@ import 'dart:developer';
 import 'dart:io';
 
 import 'package:chatapp/controller/firebase_helper.dart';
-import 'package:chatapp/main.dart';
 import 'package:chatapp/models/user_model.dart';
 import 'package:chatapp/views/chat_room_screen.dart';
 import 'package:chatapp/views/login_screen.dart';
