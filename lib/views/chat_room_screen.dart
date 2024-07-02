@@ -119,7 +119,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         });
       } else {
         log('false--');
-        // Your code inside the false block
+        
         sendMessage(); // Only send the message when conditions are not met
       }
     } catch (e) {
@@ -274,7 +274,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       MessageModel newMessage = MessageModel(
         messageId: uuid.v1(),
         sender: widget.userModel!.uid,
-        createdOn: DateTime.now(),
+        createdOn: DateTime.now().microsecondsSinceEpoch,
         text: textToSend,
         seen: false, // Set seen to false for new messages
         imageUrl: imageUrl,

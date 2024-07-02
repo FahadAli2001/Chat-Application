@@ -2,8 +2,8 @@ class MessageModel {
   String? messageId;
   String? sender;
   String? text;
-  bool? seen;
-  DateTime? createdOn;
+  bool? seen; 
+  int? createdOn;
   String? imageUrl;
   String? voiceNoteUrl;
   String? fileUrl;  
